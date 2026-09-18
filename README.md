@@ -1,42 +1,37 @@
 # نظام سكن الموظفين — Web
 
-تم تحويل برنامج `staff_housing_template.py` المكتبي (Tkinter/JSON) إلى تطبيق Web مبني بـ Flask + SQLAlchemy.
+نسخة Web من برنامج نظام سكن الموظفين، مبنية بـ Flask + SQLAlchemy + Excel/PDF.
 
-## الوظائف الموجودة
-- الشقق والكامب كقسمين مستقلين
-- بيانات المشروع (الكود والاسم)
-- إضافة/تعديل/إنهاء/حذف الوحدات
-- إدارة الأعمدة وإضافة أعمدة مخصصة
-- الموظفون: إضافة، تسكين، إخلاء، أرشيف
-- مرفقات العقود والموظفين
-- بحث شامل
-- استيراد Excel للشقق والموظفين مع aliases
-- تنزيل قوالب Excel
-- مطالبة السكن الشهرية
-- العقود القريبة من الانتهاء
-- الإشغال والشواغر
-- ملخص التكلفة حسب الفئة والمنطقة
-- حركة الموظفين
-- العهدات: إنشاء، بنود استهلاك، تعديل، حذف، Excel، PDF، إغلاق وأرشيف
-- API بسيطة للـ dashboard
+## مهم قبل الإنتاج على Vercel
 
-## تشغيل محلي
+Vercel يدعم Flask مباشرة. الكود يستخدم `/tmp` فقط كمساحة تشغيل مؤقتة على Vercel، لكن **قاعدة البيانات والملفات المرفوعة لا يجب أن تعتمد على Vercel filesystem**.
+
+للحفظ الدائم:
+
+1. أنشئ PostgreSQL Database (مثلاً Supabase أو Neon).
+2. أضف في Vercel Environment Variables:
+   - `DATABASE_URL` = PostgreSQL connection string
+   - `SECRET_KEY` = قيمة عشوائية طويلة
+   - `ADMIN_USER` = اسم مستخدم المدير
+   - `ADMIN_PASSWORD` = كلمة مرور المدير
+3. أعد Deploy.
+
+بدون `DATABASE_URL` سيعمل المشروع محلياً بـ SQLite، وعلى Vercel سيستخدم SQLite داخل `/tmp` مؤقتاً فقط للاختبار؛ البيانات قد تختفي عند إعادة تشغيل الـ Function.
+
+## تشغيل محلياً
+
 ```bash
 python -m venv .venv
-.venv\\Scripts\\activate   # Windows
+# Windows
+.venv\\Scripts\\activate
 pip install -r requirements.txt
-set ADMIN_USER=admin
-set ADMIN_PASSWORD=admin123
 python app.py
 ```
+
 ثم افتح `http://127.0.0.1:5000`.
 
 ## GitHub + Vercel
-1. ارفع الملفات إلى repository جديد.
-2. في Vercel اختر Import Project من GitHub.
-3. أضف Environment Variables: `SECRET_KEY`, `ADMIN_USER`, `ADMIN_PASSWORD`, `DATABASE_URL`.
-4. استخدم PostgreSQL production database. SQLite مناسب للتجربة المحلية فقط.
-5. ملفات الرفع المحلية داخل Vercel ليست storage دائمًا؛ استخدم Storage خارجي قبل الاعتماد على النظام في الإنتاج.
 
-## ملاحظة مهمة
-هذه النسخة تنقل وظائف البرنامج إلى Web مع قاعدة بيانات. تصميم PDF/Excel التفصيلي للعهدة قد يحتاج مطابقة شكل النماذج الورقية الأصلية إذا أردت نفس الشكل 100%.
+ارفع محتويات هذا المجلد إلى Repository في GitHub، ثم استورد الـ Repository داخل Vercel.
+
+لا ترفع أي `.env` أو قاعدة بيانات أو ملفات مرفوعة حقيقية إلى GitHub.

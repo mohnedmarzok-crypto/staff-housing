@@ -18,9 +18,16 @@ COMPANY_NAME='Hassan Allam Construction'
 WORKSPACES={'apartments':'الشقق','camp':'الكامب'}
 CONSUMPTION_TYPES=['كهرباء','مياه','غاز','نظافة','أخرى']
 BASE=Path(__file__).resolve().parent
-UPLOAD=BASE/'uploads'
-UPLOAD.mkdir(exist_ok=True)
-DB_URL=os.getenv('DATABASE_URL','sqlite:///staff_housing.db')
+# Vercel deployments are immutable/read-only. Runtime writes must use /tmp.
+IS_VERCEL=bool(os.getenv('VERCEL'))
+RUNTIME_BASE=Path('/tmp/staff_housing') if IS_VERCEL else BASE
+RUNTIME_BASE.mkdir(parents=True, exist_ok=True)
+UPLOAD=RUNTIME_BASE/'uploads'
+UPLOAD.mkdir(parents=True, exist_ok=True)
+# SQLite is fine for local development only. On Vercel, set DATABASE_URL to a
+# persistent PostgreSQL database (Supabase/Neon/Railway/etc.). The /tmp fallback
+# exists only so a fresh deployment can boot before the database is configured.
+DB_URL=os.getenv('DATABASE_URL') or f'sqlite:///{RUNTIME_BASE / "staff_housing.db"}'
 if DB_URL.startswith('postgres://'): DB_URL=DB_URL.replace('postgres://','postgresql+psycopg://',1)
 elif DB_URL.startswith('postgresql://'): DB_URL=DB_URL.replace('postgresql://','postgresql+psycopg://',1)
 engine=create_engine(DB_URL, pool_pre_ping=True, connect_args={'check_same_thread':False} if DB_URL.startswith('sqlite') else {})
