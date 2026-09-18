@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.env
+staff_housing.db
+uploads/*
+!.gitkeep
+.vercel/
