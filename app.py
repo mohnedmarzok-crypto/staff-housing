@@ -27,12 +27,26 @@ UPLOAD.mkdir(parents=True, exist_ok=True)
 # SQLite is fine for local development only. On Vercel, set DATABASE_URL to a
 # persistent PostgreSQL database (Supabase/Neon/Railway/etc.). The /tmp fallback
 # exists only so a fresh deployment can boot before the database is configured.
-DB_URL=os.getenv('DATABASE_URL') or f'sqlite:///{RUNTIME_BASE / "staff_housing.db"}'
-if DB_URL.startswith('postgres://'): DB_URL=DB_URL.replace('postgres://','postgresql+psycopg://',1)
-elif DB_URL.startswith('postgresql://'): DB_URL=DB_URL.replace('postgresql://','postgresql+psycopg://',1)
-engine=create_engine(DB_URL, pool_pre_ping=True, connect_args={'check_same_thread':False} if DB_URL.startswith('sqlite') else {})
-Session=scoped_session(sessionmaker(bind=engine))
+DB_URL=(os.getenv('DATABASE_URL') or '').strip()
+if DB_URL.startswith('postgres://'):
+    DB_URL=DB_URL.replace('postgres://','postgresql+psycopg://',1)
+elif DB_URL.startswith('postgresql://'):
+    DB_URL=DB_URL.replace('postgresql://','postgresql+psycopg://',1)
+elif not DB_URL:
+    DB_URL=f'sqlite:///{RUNTIME_BASE / "staff_housing.db"}'
+engine=None
+Session=scoped_session(sessionmaker())
 Base=declarative_base()
+
+def get_engine():
+    global engine
+    if engine is None:
+        kwargs={'pool_pre_ping':True}
+        if DB_URL.startswith('sqlite'):
+            kwargs['connect_args']={'check_same_thread':False}
+        engine=create_engine(DB_URL, **kwargs)
+        Session.configure(bind=engine)
+    return engine
 
 class Apartment(Base):
     __tablename__='apartments'
@@ -67,7 +81,16 @@ class CustodyLine(Base):
     id=Column(Integer,primary_key=True); custody_id=Column(Integer,ForeignKey('custodies.id')); apartment_id=Column(Integer,ForeignKey('apartments.id'))
     consumption_type=Column(String(100)); invoice_date=Column(Date); meter_code=Column(String(150)); previous_reading=Column(Float,default=0); current_reading=Column(Float,default=0); quantity=Column(Float,default=0); amount=Column(Float,default=0); notes=Column(Text)
     custody=relationship('Custody',back_populates='lines'); apartment=relationship('Apartment')
-Base.metadata.create_all(engine)
+DB_INITIALIZED=False
+
+def ensure_db():
+    global DB_INITIALIZED
+    if DB_INITIALIZED:
+        return
+    db_engine=get_engine()
+    Base.metadata.create_all(db_engine)
+    seed_fields()
+    DB_INITIALIZED=True
 
 DEFAULT_FIELDS=[('contract_no','كود الوحدة / رقم العقد *','text'),('landlord','اسم المؤجر','text'),('district','المنطقة','text'),('building_no','رقم العقار','text'),('apt_no','رقم الشقة','text'),('rooms','عدد الغرف','text'),('category','فئة السكن','text'),('insurance_amount','قيمة التأمين','number'),('rent_amount','قيمة الإيجار','number'),('capacity','الطاقة الاستيعابية','number'),('contract_start','بداية التعاقد','date'),('contract_end','نهاية التعاقد','date')]
 
@@ -78,7 +101,6 @@ def seed_fields():
             for i,(k,l,t) in enumerate(DEFAULT_FIELDS): s.add(FieldDef(workspace=ws,key=k,label=l,field_type=t,sort_order=i))
         if not s.query(ProjectInfo).filter_by(workspace=ws).first(): s.add(ProjectInfo(workspace=ws,code='',name=''))
     s.commit(); s.close()
-seed_fields()
 
 def dparse(v):
     if not v: return None
@@ -136,6 +158,20 @@ def project_payload(p): return {'code':p.code or '','name':p.name or ''}
 
 app=Flask(__name__); app.secret_key=os.getenv('SECRET_KEY','change-this-secret-in-production')
 app.config['MAX_CONTENT_LENGTH']=25*1024*1024
+
+@app.before_request
+def initialize_database():
+    if request.endpoint == 'health':
+        return None
+    try:
+        ensure_db()
+    except Exception:
+        app.logger.exception('Database initialization failed')
+        return jsonify({'error':'Database initialization failed','hint':'Set a valid DATABASE_URL PostgreSQL connection string in Vercel Environment Variables.'}), 503
+
+@app.get('/health')
+def health():
+    return jsonify({'status':'ok','vercel':bool(os.getenv('VERCEL'))})
 app.jinja_env.globals['getattr']=getattr
 app.jinja_env.globals['today']=dt.date.today
 @app.teardown_appcontext
