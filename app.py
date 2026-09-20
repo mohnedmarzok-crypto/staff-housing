@@ -6,12 +6,6 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 from sqlalchemy import create_engine, Column, Integer, String, Float, Text, Date, ForeignKey, Boolean, select, func, or_, and_
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker, scoped_session
-from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Font, Alignment
-from reportlab.lib.pagesizes import A4, landscape
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet
 
 APP_NAME='نظام سكن الموظفين'
 COMPANY_NAME='Hassan Allam Construction'
@@ -159,19 +153,40 @@ def project_payload(p): return {'code':p.code or '','name':p.name or ''}
 app=Flask(__name__); app.secret_key=os.getenv('SECRET_KEY','change-this-secret-in-production')
 app.config['MAX_CONTENT_LENGTH']=25*1024*1024
 
+DB_REQUIRED_ENDPOINTS={
+    'dashboard','project_settings','columns','apartment_new','apartment_edit','apartment_detail',
+    'apartment_close','apartment_delete','apartment_delete_all','resident_new','move_out','files',
+    'archive','reopen','search','import_apartments','import_residents','template_download',
+    'monthly_report','expiry_report','occupancy_report','cost_report','movement_report',
+    'custodies','custody_new','custody_detail','custody_line','custody_line_delete','custody_export','custody_pdf'
+}
+
 @app.before_request
 def initialize_database():
-    if request.endpoint == 'health':
+    # Login/health must remain available even if the database is not configured yet.
+    if request.endpoint in {'health','login','static'} or request.endpoint not in DB_REQUIRED_ENDPOINTS:
         return None
     try:
         ensure_db()
-    except Exception:
+    except Exception as exc:
         app.logger.exception('Database initialization failed')
-        return jsonify({'error':'Database initialization failed','hint':'Set a valid DATABASE_URL PostgreSQL connection string in Vercel Environment Variables.'}), 503
+        return jsonify({'error':'Database initialization failed','details':str(exc),'hint':'Set a valid DATABASE_URL PostgreSQL connection string in Vercel Environment Variables.'}), 503
 
 @app.get('/health')
 def health():
-    return jsonify({'status':'ok','vercel':bool(os.getenv('VERCEL'))})
+    return jsonify({'status':'ok','vercel':bool(os.getenv('VERCEL')),'python':'flask'})
+
+@app.get('/health/db')
+def health_db():
+    try:
+        ensure_db()
+        with Session() as s:
+            s.execute(select(1))
+        return jsonify({'status':'ok','database':'reachable'})
+    except Exception as exc:
+        app.logger.exception('Database health check failed')
+        return jsonify({'status':'error','database':'unreachable','details':str(exc)}), 503
+
 app.jinja_env.globals['getattr']=getattr
 app.jinja_env.globals['today']=dt.date.today
 @app.teardown_appcontext
@@ -179,7 +194,13 @@ def shutdown(exc=None): Session.remove()
 
 @app.context_processor
 def inject():
-    return {'APP_NAME':APP_NAME,'COMPANY_NAME':COMPANY_NAME,'WORKSPACES':WORKSPACES,'current_ws':get_ws(),'project':project(Session())}
+    p=None
+    if session.get('user') and session.get('workspace') in WORKSPACES:
+        try:
+            p=project(Session())
+        except Exception:
+            p=None
+    return {'APP_NAME':APP_NAME,'COMPANY_NAME':COMPANY_NAME,'WORKSPACES':WORKSPACES,'current_ws':get_ws(),'project':p}
 
 @app.route('/')
 def home():
@@ -352,6 +373,7 @@ def search():
 @login_required
 @ws_required
 def import_apartments():
+    from openpyxl import load_workbook
     if request.method=='POST':
         f=request.files.get('file'); s=Session()
         if not f: flash('اختر ملف Excel','danger'); return redirect(url_for('import_apartments'))
@@ -373,6 +395,7 @@ def normhead(x): return str(x).strip().replace(' *','').replace('  ',' ')
 @login_required
 @ws_required
 def import_residents():
+    from openpyxl import load_workbook
     if request.method=='POST':
         f=request.files.get('file'); s=Session()
         if not f: flash('اختر ملف Excel','danger'); return redirect(url_for('import_residents'))
@@ -395,6 +418,7 @@ def import_residents():
 @login_required
 @ws_required
 def template_download(kind):
+    from openpyxl import Workbook
     s=Session(); wb=Workbook(); ws=wb.active; ws.sheet_view.rightToLeft=True
     if kind=='apartments': ws.title='شقق'; ws.append([f.label for f in fields(s)]) ; name='قالب_استيراد_الشقق.xlsx'
     else: ws.title='موظفين'; ws.append(['اسم الموظف *','كود الموظف','رقم البطاقة','الوظيفة','نوع التعيين','كود الوحدة / رقم العقد (الشقة) *','تاريخ التسكين * (YYYY-MM-DD)','تاريخ الخروج (اختياري YYYY-MM-DD)']); name='قالب_استيراد_الموظفين.xlsx'
@@ -403,6 +427,8 @@ def template_download(kind):
 # Reports
 MONTHS=['','يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر']
 def make_xlsx(title,headers,rows,filename,sheets=None):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment
     wb=Workbook(); ws=wb.active; ws.title=title; ws.sheet_view.rightToLeft=True; ws.append(headers)
     for r in rows: ws.append(r)
     for c in ws[1]: c.font=Font(bold=True); c.alignment=Alignment(horizontal='right')
@@ -510,6 +536,10 @@ def custody_export(cid):
 @login_required
 @ws_required
 def custody_pdf(cid):
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet
     s=Session(); c=s.query(Custody).filter_by(id=cid,workspace=get_ws()).first_or_404(); b=io.BytesIO(); doc=SimpleDocTemplate(b,pagesize=landscape(A4)); styles=getSampleStyleSheet(); story=[Paragraph(f'{APP_NAME} — عهدة {c.custody_no}',styles['Title']),Spacer(1,10),Paragraph(f'المندوب: {c.delegate_name or ""} | مسؤول السكن: {c.housing_officer or ""}',styles['Normal']),Spacer(1,10)]; data=[['الوحدة','النوع','التاريخ','العداد','الكمية','القيمة','ملاحظات']]+[[l.apartment.contract_no,l.consumption_type,str(l.invoice_date or ''),l.meter_code,l.quantity,l.amount,l.notes or ''] for l in c.lines]; t=Table(data,repeatRows=1); t.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#34495e')),('TEXTCOLOR',(0,0),(-1,0),colors.white),('GRID',(0,0),(-1,-1),.5,colors.grey),('ALIGN',(0,0),(-1,-1),'RIGHT')])); story.append(t); doc.build(story); b.seek(0); return send_file(b,download_name=f'عهدة_{c.custody_no}.pdf',as_attachment=True)
 
 # Combined quick API for future frontend/mobile use
