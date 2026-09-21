@@ -189,6 +189,7 @@ def health_db():
 
 app.jinja_env.globals['getattr']=getattr
 app.jinja_env.globals['today']=dt.date.today
+app.jinja_env.globals['extras']=extras
 @app.teardown_appcontext
 def shutdown(exc=None): Session.remove()
 
