@@ -27,7 +27,7 @@ elif DB_URL.startswith('postgresql://'):
     DB_URL=DB_URL.replace('postgresql://','postgresql+psycopg://',1)
 elif not DB_URL:
     DB_URL=f'sqlite:///{RUNTIME_BASE / "staff_housing.db"}'
-engine=None
+engine=db
 Session=scoped_session(sessionmaker())
 Base=declarative_base()
 
