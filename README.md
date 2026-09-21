@@ -27,3 +27,24 @@ python app.py
 ## النشر على Vercel
 أضف Environment Variables: DATABASE_URL و SECRET_KEY و ADMIN_USER و ADMIN_PASSWORD.
 استخدم PostgreSQL مستديمة للإنتاج؛ لا تعتمد على SQLite أو /tmp لحفظ بيانات الإنتاج على Vercel.
+
+
+## Firebase / Firestore deployment
+
+The application now uses Firestore through the Firebase Admin SDK and is designed to run on Cloud Run.
+
+### Required Cloud Run environment variables
+- `SECRET_KEY`
+- `ADMIN_USER`
+- `ADMIN_PASSWORD`
+- `GOOGLE_CLOUD_PROJECT=staff-housing`
+
+The Cloud Run service account must have permission to read and write the Firestore database (Cloud Datastore User / `roles/datastore.user`).
+
+### Deploy
+Build the Docker image and deploy the service as `staff-housing` in `us-central1`. Firebase Hosting is configured to rewrite requests to that Cloud Run service.
+
+Firestore database:
+- Database ID: `(default)`
+- Location: `nam5`
+- Mode: Firestore Native
