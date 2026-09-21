@@ -32,14 +32,7 @@ Session=scoped_session(sessionmaker())
 Base=declarative_base()
 
 def get_engine():
-    global engine
-    if engine is None:
-        kwargs={'pool_pre_ping':True}
-        if DB_URL.startswith('sqlite'):
-            kwargs['connect_args']={'check_same_thread':False}
-        engine=create_engine(DB_URL, **kwargs)
-        Session.configure(bind=engine)
-    return engine
+    return db
 
 class Apartment(Base):
     __tablename__='apartments'
