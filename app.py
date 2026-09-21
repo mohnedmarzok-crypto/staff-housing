@@ -17,16 +17,7 @@ RUNTIME_BASE=Path('/tmp/staff_housing') if IS_VERCEL else BASE
 RUNTIME_BASE.mkdir(parents=True, exist_ok=True)
 UPLOAD=RUNTIME_BASE/'uploads'
 UPLOAD.mkdir(parents=True, exist_ok=True)
-# SQLite is fine for local development only. On Vercel, set DATABASE_URL to a
-# persistent PostgreSQL database (Supabase/Neon/Railway/etc.). The /tmp fallback
-# exists only so a fresh deployment can boot before the database is configured.
-DB_URL=(os.getenv('DATABASE_URL') or '').strip()
-if DB_URL.startswith('postgres://'):
-    DB_URL=DB_URL.replace('postgres://','postgresql+psycopg://',1)
-elif DB_URL.startswith('postgresql://'):
-    DB_URL=DB_URL.replace('postgresql://','postgresql+psycopg://',1)
-elif not DB_URL:
-    DB_URL=f'sqlite:///{RUNTIME_BASE / "staff_housing.db"}'
+# Firestore is used for persistent data. Local file storage remains temporary until Firebase Storage is enabled.
 engine=db
 Session=scoped_session(sessionmaker())
 Base=declarative_base()
