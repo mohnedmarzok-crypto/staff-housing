@@ -4,8 +4,7 @@ from pathlib import Path
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file, abort, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
-from sqlalchemy import create_engine, Column, Integer, String, Float, Text, Date, ForeignKey, Boolean, select, func, or_, and_
-from sqlalchemy.orm import declarative_base, relationship, sessionmaker, scoped_session
+from firestore_compat import create_engine, Column, Integer, String, Float, Text, Date, ForeignKey, Boolean, select, func, or_, and_, declarative_base, relationship, sessionmaker, scoped_session, db
 
 APP_NAME='نظام سكن الموظفين'
 COMPANY_NAME='Hassan Allam Construction'
