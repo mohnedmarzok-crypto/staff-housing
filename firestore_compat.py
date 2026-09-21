@@ -59,7 +59,8 @@ class SortKey:
         self.field = field
         self.reverse = reverse
     def key(self, obj):
-        return getattr(obj, self.field.name, None)
+        value = getattr(obj, self.field.name, None)
+        return (value is None, value)
     def __eq__(self, other):
         return isinstance(other, SortKey) and self.field.name == other.field.name and self.reverse == other.reverse
     def __lt__(self, other):
